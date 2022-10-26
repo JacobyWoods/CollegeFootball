@@ -3,7 +3,10 @@ import time
 import cfbd
 from cfbd.rest import ApiException
 from pprint import pprint
+import pandas as pd
+import numpy as np
 import config
+
 
 def get_cfbd_api():
 
@@ -12,23 +15,37 @@ def get_cfbd_api():
     configuration.api_key['Authorization'] = config.cfbd_api_key
     configuration.api_key_prefix['Authorization'] = 'Bearer'
 
-    # create an instance of the API class
-    api_instance = cfbd.BettingApi(cfbd.ApiClient(configuration))
-    game_id = 56 # int | Game id filter (optional)
-    year = 2013 # int | Year/season filter for games (optional)
-    week = 7 # int | Week filter (optional)
-    season_type = 'regular' # str | Season type filter (regular or postseason) (optional) (default to regular)
-    team = 'team_example' # str | Team (optional)
-    home = 'home_example' # str | Home team filter (optional)
-    away = 'away_example' # str | Away team filter (optional)
-    conference = 'conference_example' # str | Conference abbreviation filter (optional)
+    # create an instance of the API class (teams)
+    teams_api = cfbd.TeamsApi(cfbd.ApiClient(configuration))
 
-    try:
-        # Betting lines
-        api_response = api_instance.get_lines(game_id=game_id, year=year, week=week, season_type=season_type, team=team, home=home, away=away, conference=conference)
-        pprint(api_response)
-    except ApiException as e:
-        print("Exception when calling BettingApi->get_lines: %s\n" % e)
+    # create list of all schools
+    teams = teams_api.get_fbs_teams()
+    team_names = [t.school for t in teams]
+
+    # create an instance of the API class (conferences)
+    conferences_api = cfbd.ConferencesApi(cfbd.ApiClient(configuration))
+
+    # create a list of all conferences
+    conferences = conferences_api.get_conferences()
+
+    # create an instance of the API class (Betting Lines)
+    betting_lines_api = cfbd.BettingApi(cfbd.ApiClient(configuration))
+
+    # create list of betting lines
+    year = 2021
+    betting_lines = betting_lines_api.get_lines(year=year)
+
+    df = pd.DataFrame.from_records([dict(home_team=b.home_team, home_score=b.home_score, away_team=b.away_team,
+                                    away_score=b.away_score, line=b.lines) for b in betting_lines])
+    df['line'] = df['line'].apply(lambda x: 'NaN' if x == [] else x[0])
+    df = df[(df['line'] != 'NaN')]
+    df['line'] = df['line'].apply(lambda x: x.formatted_spread)
+
+
+    pd.set_option('display.max_columns', None)
+    #pd.set_option('display.max_rows', None)
+
+    pprint(df.head())
 
 if __name__ == '__main__':
 
