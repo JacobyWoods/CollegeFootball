@@ -85,6 +85,8 @@ def cfb_rankings():
 
     df = pd.DataFrame.from_records([dict(team=t.team, away_games=t.away_games, home_games=t.home_games)
                                     for t in team_records])
+    df['team_index'] = df['team']
+    df = df.set_index('team_index')
     df['home_wins'] = df['home_games'].apply(lambda x: x.wins)
     df['home_losses'] = df['home_games'].apply(lambda x: x.losses)
     df['home_total'] = df['home_games'].apply(lambda x: x.games)
@@ -95,15 +97,54 @@ def cfb_rankings():
     df['away_total'] = df['away_games'].apply(lambda x: x.games)
     df['away_winning_percent'] = df['away_wins'] / df['away_total']
     df = df.drop('away_games', axis=1)
+    df['wins'] = df['home_wins'] + df['away_wins']
+    df['losses'] = df['home_losses'] + df['away_losses']
+    df['games'] = df['home_total'] + df['away_total']
+    df['winning_percent'] = df['home_wins'] / df['games']
 
     # create an instance of the API class: games results
-    games_api = cfbd.GamesApi(cfbd.ApiClient(configuration))
     games = games_api.get_games(year=year)
+    df_games = pd.DataFrame.from_records([dict(away_team=g.away_team, away_score=g.away_points, home_team=g.home_team,
+                                               home_score=g.home_points)for g in games])
+    df_games['winner'] = np.where(df_games['away_score'] > df_games['home_score'], df_games['away_team'],
+                                  df_games['home_team'])
 
-    pprint(games[0])
+    # add opponent win percentage to df
+    df['opponent_win'] = np.nan
+    df['opponent_loss'] = np.nan
+    for team in df['team']:
+        df_temp = df_games[(df_games['home_team'] == team) | (df_games['away_team'] == team)]
+        opponent_win = 0
+        opponent_loss = 0
+        for index, row in df_temp.iterrows():
+            if row['home_team'] == team:
+                if row['away_team'] in df['team'].values:
+                    opponent_win += df.at[row['away_team'], 'wins']
+                    opponent_loss += df.at[row['away_team'], 'losses']
+            else:
+                if row['home_team'] in df['team'].values:
+                    opponent_win += df.at[row['home_team'], 'wins']
+                    opponent_loss += df.at[row['home_team'], 'losses']
+        df.at[team, 'opponent_win'] = opponent_win
+        df.at[team, 'opponent_loss'] = opponent_loss
+        df['opponent_win_percent'] = df['opponent_win'] / (df['opponent_loss'] + df['opponent_win'])
+
+    # add SOS rank, currently strictly bases on opponent win percentage
+    df['sos_rank'] = df['opponent_win_percent'].rank(ascending=False)
+    df['sos_rank'] = df['sos_rank'].apply(lambda x: int(x))
+
+    # create team ranking by sos * win percentage
+    df['team_rating'] = df['opponent_win_percent'] * df['winning_percent']
+    df['team_rank'] = df['team_rating'].rank(ascending=False)
+    df['team_rank'] = df['team_rank'].apply(lambda x: int(x))
+
+    pprint(df.head())
+    pprint(df_games.head())
+    df.to_csv('TEST.csv')
 
 if __name__ == '__main__':
 
     pd.set_option('display.max_columns', None)
+    pd.set_option('display.width', 1000)
     #pd.set_option('display.max_rows', None)
     cfb_rankings()
