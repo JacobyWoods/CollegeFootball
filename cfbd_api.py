@@ -100,7 +100,7 @@ def cfb_rankings():
     df['wins'] = df['home_wins'] + df['away_wins']
     df['losses'] = df['home_losses'] + df['away_losses']
     df['games'] = df['home_total'] + df['away_total']
-    df['winning_percent'] = df['home_wins'] / df['games']
+    df['winning_percent'] = df['wins'] / df['games']
 
     # create an instance of the API class: games results
     games = games_api.get_games(year=year)
