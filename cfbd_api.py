@@ -8,6 +8,10 @@ import numpy as np
 import config
 import seaborn as sns
 import matplotlib.pyplot as plt
+import smtplib
+import ssl
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 
 def get_cfbd_api():
@@ -68,6 +72,7 @@ def betting_line_accuracy():
     fig = sns.boxplot(df, x='spread_margin')
 
     plt.show()
+
 
 def cfb_rankings():
 
@@ -140,11 +145,68 @@ def cfb_rankings():
 
     pprint(df.head())
     pprint(df_games.head())
-    df.to_csv('TEST.csv')
+    df.to_csv(f'cfb_stats_{year}.csv')
+
+
+def email_ranking_list():
+    file = 'cfb_stats_2021.csv'
+
+    df = pd.read_csv(file, usecols=['team', 'team_rank', 'team_rating'])
+    df = df.sort_values(by=['team_rank'])
+
+    # crate message content for top 25 rankings.
+    message_text = ''
+    html_message_text = ''
+    for index, row in df.head(25).iterrows():
+        message_text += str(row['team_rank'])
+        message_text += ' ' * 5
+        message_text += row['team']
+        message_text += '\n'
+        html_message_text += str(row['team_rank'])
+        html_message_text += ' ' * 5
+        html_message_text += row['team']
+        html_message_text += '<br>'
+
+    # email server settings
+    smtp_server = 'smtp.gmail.com'
+    port = 465
+    sender_email = 'jcoby6@gmail.com'
+    receiver_email = 'jcoby6@gmail.com'
+    password = config.gmail_pw
+
+    message = MIMEMultipart("alternative")
+    message["Subject"] = "CFB Top 25 Rankings"
+    message["From"] = sender_email
+    message["To"] = receiver_email
+
+    html = f"""
+    <html>
+      <body>
+        <p>Latest top 25 CFB rankings: <br> <br>
+           {html_message_text}<br>
+        </p>
+      </body>
+    </html>
+    """
+
+    part1 = MIMEText(message_text, "plain")
+    part2 = MIMEText(html, "html")
+
+    message.attach(part1)
+    message.attach(part2)
+
+    context = ssl.create_default_context()
+
+    with smtplib.SMTP_SSL(smtp_server, port, context=context) as server:
+        server.login(sender_email, password)
+        server.sendmail(sender_email, receiver_email, message.as_string())
+
+    df.to_csv('top_25.csv')
+
 
 if __name__ == '__main__':
 
     pd.set_option('display.max_columns', None)
     pd.set_option('display.width', 1000)
     #pd.set_option('display.max_rows', None)
-    cfb_rankings()
+    email_ranking_list()
